@@ -16,10 +16,8 @@ if "round_info" not in st.session_state:
     st.session_state.round_info = None
 if "shots" not in st.session_state:
     st.session_state.shots = []
-if "lat" not in st.session_state:
-    st.session_state.lat = None
-if "lon" not in st.session_state:
-    st.session_state.lon = None
+if "floating_pin" not in st.session_state:
+    st.session_state.floating_pin = [44.9969, -93.4336] 
 
 st.title("⛳ Golf Shot Logger")
 
@@ -63,7 +61,7 @@ if st.session_state.round_active:
 
     # Folium Map for shot location
     st.subheader("Click on the map to set shot location")
-    map_center = [st.session_state.lat or 44.9969, st.session_state.lon or -93.4336]
+    map_center = st.session_state.floating_pin
     m = folium.Map(location=map_center, zoom_start=18, tiles=None)
 
     # Add ESRI Satellite
@@ -83,11 +81,14 @@ if st.session_state.round_active:
     for hole_num, shots in shots_by_hole.items():
         prev_shot = None
         for shot in shots:
-            # Add a flag marker
-            folium.Marker(
+            # Use CircleMarker (small dot)
+            folium.CircleMarker(
                 location=[shot["lat"], shot["lon"]],
-                popup=f"Hole {shot['hole']}: {shot['lie']} ({shot.get('distance', 0):.1f} yd)",
-                icon=folium.Icon(color="red", icon="flag")
+                radius=3,
+                color="blue",
+                fill=True,
+                fill_color="blue",
+                fill_opacity=0.7
             ).add_to(m)
             # Draw line from previous shot in the same hole
             if prev_shot:
@@ -97,28 +98,36 @@ if st.session_state.round_active:
                 ).add_to(m)
             prev_shot = shot
 
-    map_click = st_folium(m, width=600, height=400)
+    fp = st.session_state.floating_pin
+    folium.CircleMarker(
+        location=fp,
+        radius=3,
+        color="red",
+        fill=False,
+        popup="Floating pin (click map to move)"
+    ).add_to(m)
 
-    # Update session state lat/lon if user clicked
-    if map_click and map_click.get("last_clicked"):
-        st.session_state.lat = map_click["last_clicked"]["lat"]
-        st.session_state.lon = map_click["last_clicked"]["lng"]
-        st.info(f"Selected coordinates: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
+    # render map and capture last_clicked (works reliably)
+    map_result = st_folium(m, width=900, height=600)
 
-    # Log shot
+    # if user clicked on map, update floating_pin coordinates
+    if map_result and map_result.get("last_clicked"):
+        click = map_result["last_clicked"]
+        st.session_state.floating_pin = [click["lat"], click["lng"]]
+        st.info(f"Floating pin moved to: {click['lat']:.6f}, {click['lng']:.6f}")
+
+    # --- handle submit: convert floating pin -> logged dot
     if submit_shot:
-        if st.session_state.lat and st.session_state.lon:
-            shot = {
-                "timestamp": datetime.datetime.now().isoformat(),
-                "hole": hole,
-                "lie": lie,
-                "lat": st.session_state.lat,
-                "lon": st.session_state.lon
-            }
-            st.session_state.shots.append(shot)
-            st.success(f"✅ Shot logged for Hole {hole}: {lie}")
-        else:
-            st.warning("No shot location selected. Click on the map first.")
+        lat, lon = st.session_state.floating_pin
+        shot = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "hole": hole,
+            "lie": lie,
+            "lat": lat,
+            "lon": lon,
+        }
+        st.session_state.shots.append(shot)
+        st.success(f"Shot logged — Hole {hole}, {lie}")
 
 # Show all shots in round
 if st.session_state.shots:
