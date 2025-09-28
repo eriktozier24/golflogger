@@ -107,8 +107,7 @@ if st.session_state.round_active:
         popup="Floating pin (click map to move)"
     ).add_to(m)
 
-    # render map and capture last_clicked (works reliably)
-    map_result = st_folium(m, width=900, height=600)
+    map_result = st_folium(m, width=400, height=400)
 
     # if user clicked on map, update floating_pin coordinates
     if map_result and map_result.get("last_clicked"):
