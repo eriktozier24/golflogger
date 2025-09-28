@@ -64,8 +64,16 @@ if st.session_state.round_active:
     # Folium Map for shot location
     st.subheader("Click on the map to set shot location")
     map_center = [st.session_state.lat or 44.9969, st.session_state.lon or -93.4336]
-    m = folium.Map(location=map_center, zoom_start=17,tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",attr="Esri")
-    folium.TileLayer('OpenStreetMap').add_to(m)
+    m = folium.Map(location=map_center, zoom_start=18, tiles=None)
+
+    # Add ESRI Satellite
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri World Imagery",
+        name="Satellite",
+        overlay=False,
+        control=True
+    ).add_to(m)
 
     # Draw shots and lines grouped by hole
     shots_by_hole = {}
@@ -89,7 +97,7 @@ if st.session_state.round_active:
                 ).add_to(m)
             prev_shot = shot
 
-    map_click = st_folium(m, width=700, height=500)
+    map_click = st_folium(m, width=600, height=400)
 
     # Update session state lat/lon if user clicked
     if map_click and map_click.get("last_clicked"):
