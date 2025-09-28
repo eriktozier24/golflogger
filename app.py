@@ -8,11 +8,12 @@ from google.oauth2.service_account import Credentials
 # ----------------------------
 # Google Sheets setup
 # ----------------------------
-SERVICE_ACCOUNT_FILE = "service_account.json"
 SHEET_ID = "1OQg0xPkaHa-ZaSN9T0eTDKV5O_NnC7ZIRJWbgRqTuI0"
 
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+
+service_account_info = st.secrets["gcp_service_account"]
+credentials = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
 gc = gspread.authorize(credentials)
 worksheet = gc.open_by_key(SHEET_ID).sheet1
 
