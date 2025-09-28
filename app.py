@@ -1,21 +1,11 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from streamlit_js_eval import get_geolocation
 import gspread
 from google.oauth2.service_account import Credentials
-
-# ----------------------------
-# Google Sheets setup
-# ----------------------------
-SHEET_ID = "1OQg0xPkaHa-ZaSN9T0eTDKV5O_NnC7ZIRJWbgRqTuI0"
-
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-
-service_account_info = st.secrets["gcp_service_account"]
-credentials = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
-gc = gspread.authorize(credentials)
-worksheet = gc.open_by_key(SHEET_ID).sheet1
+import folium
+from streamlit_folium import st_folium
+from streamlit_js_eval import get_geolocation
 
 # ----------------------------
 # Session state setup
@@ -31,7 +21,7 @@ if "lat" not in st.session_state:
 if "lon" not in st.session_state:
     st.session_state.lon = None
 
-st.title("⛳ GPS Shot Logger")
+st.title("⛳ Golf Shot Logger")
 
 # ----------------------------
 # START ROUND
@@ -45,10 +35,13 @@ if not st.session_state.round_active:
         start = st.form_submit_button("Start Round")
 
     if start:
-        st.session_state.round_info = {"date": str(date), "course": course, "player": player}
+        st.session_state.round_info = {
+            "date": str(date),
+            "course": course,
+            "player": player,
+        }
         st.session_state.shots = []
         st.session_state.round_active = True
-        st.success(f"✅ Round started: {player} at {course} on {date}")
 
 # ----------------------------
 # ROUND INFO DISPLAY
@@ -66,18 +59,44 @@ if st.session_state.round_active:
     with st.form("log_shot_form"):
         hole = st.number_input("Hole Number", min_value=1, max_value=18, step=1)
         lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Sand", "Green", "Holed"])
-        get_gps = st.checkbox("Get GPS")
         submit_shot = st.form_submit_button("Log Shot")
 
-    if get_gps:
-        location = get_geolocation()
-        if location and "coords" in location:
-            st.session_state.lat = location["coords"]["latitude"]
-            st.session_state.lon = location["coords"]["longitude"]
-            st.success(f"GPS captured: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
-        else:
-            st.warning("Could not fetch GPS coordinates.")
+    # Folium Map for shot location
+    st.subheader("Click on the map to set shot location")
+    map_center = [st.session_state.lat or 44.9969, st.session_state.lon or -93.4336]
+    m = folium.Map(location=map_center, zoom_start=17)
 
+    # Draw shots and lines grouped by hole
+    shots_by_hole = {}
+    for shot in st.session_state.shots:
+        shots_by_hole.setdefault(shot["hole"], []).append(shot)
+
+    for hole_num, shots in shots_by_hole.items():
+        prev_shot = None
+        for shot in shots:
+            # Add a flag marker
+            folium.Marker(
+                location=[shot["lat"], shot["lon"]],
+                popup=f"Hole {shot['hole']}: {shot['lie']} ({shot.get('distance', 0):.1f} yd)",
+                icon=folium.Icon(color="red", icon="flag")
+            ).add_to(m)
+            # Draw line from previous shot in the same hole
+            if prev_shot:
+                folium.PolyLine(
+                    locations=[[prev_shot["lat"], prev_shot["lon"]], [shot["lat"], shot["lon"]]],
+                    color="blue", weight=2.5, opacity=0.7
+                ).add_to(m)
+            prev_shot = shot
+
+    map_click = st_folium(m, width=700, height=500)
+
+    # Update session state lat/lon if user clicked
+    if map_click and map_click.get("last_clicked"):
+        st.session_state.lat = map_click["last_clicked"]["lat"]
+        st.session_state.lon = map_click["last_clicked"]["lng"]
+        st.info(f"Selected coordinates: {st.session_state.lat:.6f}, {st.session_state.lon:.6f}")
+
+    # Log shot
     if submit_shot:
         if st.session_state.lat and st.session_state.lon:
             shot = {
@@ -90,7 +109,7 @@ if st.session_state.round_active:
             st.session_state.shots.append(shot)
             st.success(f"✅ Shot logged for Hole {hole}: {lie}")
         else:
-            st.warning("No GPS yet. Tap 'Get GPS' first.")
+            st.warning("No shot location selected. Click on the map first.")
 
 # Show all shots in round
 if st.session_state.shots:
@@ -110,6 +129,13 @@ if st.session_state.round_active:
             for k, v in st.session_state.round_info.items():
                 df[k] = v
             # Push to Google Sheets
+            service_account_info = st.secrets["gcp_service_account"]
+            credentials = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+            SHEET_ID = "1OQg0xPkaHa-ZaSN9T0eTDKV5O_NnC7ZIRJWbgRqTuI0"
+
+            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+            gc = gspread.authorize(credentials)
+            worksheet = gc.open_by_key(SHEET_ID).sheet1
             worksheet.append_rows(df.values.tolist(), value_input_option="USER_ENTERED")
             st.success("🏁 Round pushed to Google Sheet!")
         # Reset session state
